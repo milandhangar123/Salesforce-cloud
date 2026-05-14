@@ -3,7 +3,15 @@ const cors = require('cors');
 const axios = require('axios');
 
 const app = express();
-app.use(cors({ origin: 'http://localhost:3000' }));
+
+// CORS - dono origins allow karo
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://salesforce-cloud.vercel.app'
+  ]
+}));
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 

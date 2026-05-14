@@ -4,6 +4,7 @@ import "./App.css";
 const CLIENT_ID = process.env.REACT_APP_SF_CLIENT_ID;
 const REDIRECT_URI = process.env.REACT_APP_SF_REDIRECT_URI;
 const LOGIN_URL = "https://login.salesforce.com";
+const PROXY_URL = "https://salesforce-proxy-vde6.onrender.com";
 
 const generateCodeVerifier = () => {
   const array = new Uint8Array(32);
@@ -68,7 +69,7 @@ function App() {
   const exchangeCodeForToken = async (code) => {
     const verifier = sessionStorage.getItem("pkce_verifier");
     try {
-      const res = await fetch("http://localhost:3001/auth/token", {
+      const res = await fetch(`${PROXY_URL}/auth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -87,9 +88,8 @@ function App() {
         setAccessToken(data.access_token);
         setInstanceUrl(data.instance_url);
 
-        // Fetch user info
         const userRes = await fetch(
-          "http://localhost:3001/sfapi/services/oauth2/userinfo",
+          `${PROXY_URL}/sfapi/services/oauth2/userinfo`,
           {
             headers: {
               Authorization: `Bearer ${data.access_token}`,
@@ -119,7 +119,7 @@ function App() {
     try {
       const query = `SELECT Id, ValidationName, Active, ErrorMessage FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = 'Account'`;
       const res = await fetch(
-        `http://localhost:3001/sfapi/services/data/v59.0/tooling/query?q=${encodeURIComponent(query)}`,
+        `${PROXY_URL}/sfapi/services/data/v59.0/tooling/query?q=${encodeURIComponent(query)}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -157,7 +157,7 @@ function App() {
     for (const rule of validationRules) {
       try {
         const res = await fetch(
-          `http://localhost:3001/sfapi/services/data/v59.0/tooling/sobjects/ValidationRule/${rule.Id}`,
+          `${PROXY_URL}/sfapi/services/data/v59.0/tooling/sobjects/ValidationRule/${rule.Id}`,
           {
             method: "PATCH",
             headers: {

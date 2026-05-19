@@ -29,7 +29,9 @@ function App() {
   const [accessToken, setAccessToken] = useState(null);
   const [instanceUrl, setInstanceUrl] = useState(null);
   const [validationRules, setValidationRules] = useState([]);
-  const [username, setUsername] = useState(localStorage.getItem("sf_username") || "");
+  const [username, setUsername] = useState(
+    localStorage.getItem("sf_username") || "",
+  );
   const [orgName, setOrgName] = useState(localStorage.getItem("sf_org") || "");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -95,7 +97,7 @@ function App() {
               Authorization: `Bearer ${data.access_token}`,
               "x-instance-url": data.instance_url,
             },
-          }
+          },
         );
         const userInfo = await userRes.json();
         const uname = userInfo.preferred_username || userInfo.email || "";
@@ -125,12 +127,14 @@ function App() {
             Authorization: `Bearer ${accessToken}`,
             "x-instance-url": instanceUrl,
           },
-        }
+        },
       );
       const data = await res.json();
       if (data.records) {
         setValidationRules(data.records);
-        setMessage(`Fetched ${data.records.length} validation rules from Salesforce.`);
+        setMessage(
+          `Fetched ${data.records.length} validation rules from Salesforce.`,
+        );
       } else {
         setMessage("Failed to fetch: " + JSON.stringify(data));
       }
@@ -142,7 +146,7 @@ function App() {
 
   const toggleRule = (id) => {
     setValidationRules((prev) =>
-      prev.map((r) => (r.Id === id ? { ...r, Active: !r.Active } : r))
+      prev.map((r) => (r.Id === id ? { ...r, Active: !r.Active } : r)),
     );
   };
 
@@ -151,30 +155,85 @@ function App() {
   };
 
   const deployChanges = async () => {
-    setLoading(true);
-    setMessage("Deploying changes to Salesforce...");
-    let ok = 0;
-    for (const rule of validationRules) {
-      try {
-        const res = await fetch(
-          `${PROXY_URL}/sfapi/services/data/v59.0/tooling/sobjects/ValidationRule/${rule.Id}`,
-          {
-            method: "PATCH",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-              "x-instance-url": instanceUrl,
+    try {
+      setLoading(true);
+      setMessage("Deploying changes...");
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const rule of validationRules) {
+        try {
+          // Step 1: Existing metadata fetch karo PROXY se
+          const getResponse = await fetch(
+            `${PROXY_URL}/sfapi/services/data/v59.0/tooling/sobjects/ValidationRule/${rule.Id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "x-instance-url": instanceUrl,
+              },
             },
-            body: JSON.stringify({ Metadata: { active: rule.Active } }),
+          );
+          const existingRule = await getResponse.json();
+
+          if (!existingRule.Metadata) {
+            console.error(
+              `No metadata for rule ${rule.ValidationName}:`,
+              existingRule,
+            );
+            failCount++;
+            continue;
           }
-        );
-        if (res.ok || res.status === 204) ok++;
-      } catch (e) {
-        console.error(e);
+
+          // Step 2: Metadata merge karo
+          const updatedMetadata = {
+            ...existingRule.Metadata,
+            active: rule.Active,
+          };
+
+          // Step 3: PATCH request PROXY se bhejo
+          const patchResponse = await fetch(
+            `${PROXY_URL}/sfapi/services/data/v59.0/tooling/sobjects/ValidationRule/${rule.Id}`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+                "x-instance-url": instanceUrl,
+              },
+              body: JSON.stringify({ Metadata: updatedMetadata }),
+            },
+          );
+
+          if (patchResponse.ok || patchResponse.status === 204) {
+            successCount++;
+          } else {
+            const errData = await patchResponse.json();
+            console.error(`Rule ${rule.ValidationName} failed:`, errData);
+            failCount++;
+          }
+        } catch (ruleErr) {
+          console.error(`Rule ${rule.ValidationName} error:`, ruleErr);
+          failCount++;
+        }
       }
+
+      if (failCount === 0) {
+        setMessage(
+          `✅ All ${successCount} rules successfully deployed to Salesforce!`,
+        );
+      } else {
+        setMessage(
+          `⚠️ ${successCount} deployed, ${failCount} failed. Check console (F12) for details.`,
+        );
+      }
+
+      // Refresh karo deploy ke baad
+      await getValidationRules();
+    } catch (err) {
+      setMessage("❌ Deploy failed: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    setMessage(`${ok} of ${validationRules.length} rules deployed successfully.`);
-    setLoading(false);
   };
 
   const logout = () => {
@@ -201,7 +260,13 @@ function App() {
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             {username && (
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "0.8rem", color: "var(--text-dim)", fontFamily: "JetBrains Mono, monospace" }}>
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "var(--text-dim)",
+                    fontFamily: "JetBrains Mono, monospace",
+                  }}
+                >
                   👤 {username}
                 </div>
                 <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
@@ -283,7 +348,9 @@ function App() {
               <div>
                 <div className="rules-header">
                   <span className="rules-title">Validation Rules</span>
-                  <span className="rules-count">{validationRules.length} rules</span>
+                  <span className="rules-count">
+                    {validationRules.length} rules
+                  </span>
                 </div>
                 {validationRules.map((rule, i) => (
                   <div
@@ -300,7 +367,9 @@ function App() {
                       </div>
                     </div>
                     <div className="rule-right">
-                      <span className={`badge ${rule.Active ? "badge-active" : "badge-inactive"}`}>
+                      <span
+                        className={`badge ${rule.Active ? "badge-active" : "badge-inactive"}`}
+                      >
                         {rule.Active ? "● Active" : "○ Inactive"}
                       </span>
                       <button
